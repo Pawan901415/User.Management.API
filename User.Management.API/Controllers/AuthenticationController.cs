@@ -99,6 +99,20 @@ namespace User.Management.API.Controllers
         public async Task<IActionResult> Login([FromBody] LoginModel loginModel)
         {
             var user = await _userManager.FindByNameAsync(loginModel.Username);
+
+            if (user == null)
+            {
+                return Unauthorized(new Response { Status = "Error", Message = "Invalid username or password." });
+            }
+
+            // Check if the entered password is correct
+            var isPasswordValid = await _userManager.CheckPasswordAsync(user, loginModel.Password);
+
+            if (!isPasswordValid)
+            {
+                return Unauthorized(new Response { Status = "Error", Message = "Invalid username or password." });
+            }
+
             if (user.TwoFactorEnabled)
             {
                 await _signInManager.SignOutAsync();
@@ -108,34 +122,9 @@ namespace User.Management.API.Controllers
                 var message = new Message(new string[] { user.Email! }, "OTP Confrimation", token);
                 _emailService.SendEmail(message);
 
-                return StatusCode(StatusCodes.Status200OK,
+            }
+            return StatusCode(StatusCodes.Status200OK,
                  new Response { Status = "Success", Message = $"We have sent an OTP to your Email {user.Email}" });
-            }
-            if (user != null && await _userManager.CheckPasswordAsync(user, loginModel.Password))
-            {
-                var authClaims = new List<Claim>
-                {
-                    new Claim(ClaimTypes.Name, user.UserName),
-                    new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
-                };
-                var userRoles = await _userManager.GetRolesAsync(user);
-                foreach (var role in userRoles)
-                {
-                    authClaims.Add(new Claim(ClaimTypes.Role, role));
-                }
-
-
-                var jwtToken = GetToken(authClaims);
-
-                return Ok(new
-                {
-                    token = new JwtSecurityTokenHandler().WriteToken(jwtToken),
-                    expiration = jwtToken.ValidTo
-                });
-                
-
-            }
-            return Unauthorized();
 
 
         }
